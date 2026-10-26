@@ -10,7 +10,8 @@ def client(tmp_path):
     (tmp_path / "404.html").write_text("<h1>Not found</h1>")
     (tmp_path / "_next").mkdir()
     (tmp_path / "_next" / "app.js").write_text("console.log('app');")
-    return TestClient(create_app(tmp_path))
+    with TestClient(create_app(tmp_path, tmp_path / "pm.db")) as client:
+        yield client
 
 
 def test_health_returns_ok(client):

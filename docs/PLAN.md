@@ -229,21 +229,31 @@ approved Part 5 design.
 
 ### Steps
 
-- [ ] Implement database setup that creates the SQLite file and tables if missing.
-- [ ] Seed the default board (five columns, sample cards) for a user who has none.
-- [ ] Implement the approved routes to read the board and change it: rename column, add,
+- [x] Implement database setup that creates the SQLite file and tables if missing.
+- [x] Seed the default board (five columns, sample cards) for a user who has none.
+- [x] Implement the approved routes to read the board and change it: rename column, add,
       edit, move and delete cards.
-- [ ] Scope all board routes to the signed-in user from Part 4; reject anonymous requests.
-- [ ] Ensure the database file persists across container restarts (provisional: a
-      mounted volume or bind mount set up by the start scripts).
-- [ ] Write backend unit tests using a temporary database.
-- [ ] Update `backend/AGENTS.md`.
+- [x] Scope all board routes to the signed-in user from Part 4; reject anonymous requests.
+- [x] Ensure the database file persists across container restarts (provisional: a
+      mounted volume or bind mount set up by the start scripts). Start scripts mount the
+      named volume `pm-data` at `/data` and set `DATABASE_PATH=/data/pm.db`; stop scripts
+      do not remove it.
+- [x] Write backend unit tests using a temporary database.
+- [x] Update `backend/AGENTS.md`.
 
 ### Tests/Verification
 
-- `uv run pytest` passes, covering: database created when missing, seeding, each route's
-  success path, invalid ids, anonymous rejection, and per-user isolation.
-- Manual check in the container: change the board via the API, restart, data persists.
+- [x] `uv run pytest` passes, covering: database created when missing, seeding, each route's
+      success path, invalid ids, anonymous rejection, and per-user isolation. 63 tests,
+      also run with `-W error`; `uv lock --check` passes.
+- [x] `bash -n` passes for the shell scripts; the PowerShell parser reports no errors for
+      the `.ps1` scripts.
+- [x] Manual check in the container: change the board via the API, restart, data persists.
+      Verified on Windows on 2026-10-26: `scripts/start.ps1` built and started the
+      container, an authenticated API request created a probe card, `scripts/stop.ps1`
+      removed the container, `scripts/start.ps1` rebuilt and restarted it with the named
+      `pm-data` volume, the same card was read back, then the probe card was deleted and
+      the container stopped. Mac and Linux runtime behavior is not verified.
 
 ### Success Criteria
 

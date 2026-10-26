@@ -11,10 +11,14 @@ resolve the repository root from the script location, and can be run from any di
 ## Behavior
 
 - Start: `docker build -t pm-app <repo root>`, removes any existing `pm-app` container,
-  then `docker run -d --name pm-app -p 8000:8000 pm-app`. Adds `--env-file <repo root>/.env`
-  only if that file exists. App is at http://localhost:8000.
+  then `docker run -d --name pm-app -p 8000:8000 -v pm-data:/data
+  -e DATABASE_PATH=/data/pm.db pm-app`. Adds `--env-file <repo root>/.env` only if that
+  file exists. App is at http://localhost:8000.
 - Stop: removes the `pm-app` container if it exists; otherwise prints that it is not
   running and exits successfully.
+- The SQLite database lives in the named volume `pm-data`. Stop never removes it, so data
+  survives stop/start and image rebuilds. Remove it deliberately with
+  `docker volume rm pm-data` to reset the board.
 
 Requires Docker on PATH.
 

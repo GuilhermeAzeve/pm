@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE="pm-app"
 CONTAINER="pm-app"
+VOLUME="pm-data"
 
 docker build -t "$IMAGE" "$ROOT"
 
@@ -17,5 +18,7 @@ if [ -f "$ROOT/.env" ]; then
   ENV_ARGS=(--env-file "$ROOT/.env")
 fi
 
-docker run -d --name "$CONTAINER" -p 8000:8000 ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} "$IMAGE" >/dev/null
+docker run -d --name "$CONTAINER" -p 8000:8000 \
+  -v "$VOLUME:/data" -e DATABASE_PATH=/data/pm.db \
+  ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} "$IMAGE" >/dev/null
 echo "Running at http://localhost:8000"

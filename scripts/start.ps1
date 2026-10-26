@@ -2,6 +2,7 @@
 $Root = Split-Path -Parent $PSScriptRoot
 $Image = "pm-app"
 $Container = "pm-app"
+$Volume = "pm-data"
 
 docker build -t $Image $Root
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -17,6 +18,8 @@ if (Test-Path $EnvFile) {
     $EnvArgs = @("--env-file", $EnvFile)
 }
 
-docker run -d --name $Container -p 8000:8000 @EnvArgs $Image | Out-Null
+docker run -d --name $Container -p 8000:8000 `
+    -v "${Volume}:/data" -e DATABASE_PATH=/data/pm.db `
+    @EnvArgs $Image | Out-Null
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "Running at http://localhost:8000"
