@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "database": "sqlite",
+  "tables": {
+    "users": {
+      "description": "Application users. Authentication remains hardcoded for the MVP; this table owns boards.",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "nullable": false
+        },
+        "username": {
+          "type": "TEXT",
+          "nullable": false,
+          "unique": true
+        }
+      }
+    },
+    "boards": {
+      "description": "One Kanban board per user for the MVP.",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "nullable": false
+        },
+        "user_id": {
+          "type": "INTEGER",
+          "nullable": false
+        }
+      },
+      "uniqueConstraints": [
+        [
+          "user_id"
+        ]
+      ],
+      "foreignKeys": [
+        {
+          "columns": [
+            "user_id"
+          ],
+          "references": {
+            "table": "users",
+            "columns": [
+              "id"
+            ]
+          },
+          "onDelete": "CASCADE"
+        }
+      ]
+    },
+    "board_columns": {
+      "description": "The fixed, renameable columns in a board.",
+      "columns": {
+        "board_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "id": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "title": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "position": {
+          "type": "INTEGER",
+          "nullable": false,
+          "check": "position >= 0"
+        }
+      },
+      "primaryKey": [
+        "board_id",
+        "id"
+      ],
+      "uniqueConstraints": [
+        [
+          "board_id",
+          "position"
+        ]
+      ],
+      "foreignKeys": [
+        {
+          "columns": [
+            "board_id"
+          ],
+          "references": {
+            "table": "boards",
+            "columns": [
+              "id"
+            ]
+          },
+          "onDelete": "CASCADE"
+        }
+      ]
+    },
+    "cards": {
+      "description": "Ordered cards belonging to one column on one board.",
+      "columns": {
+        "board_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "id": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "column_id": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "title": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "details": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": ""
+        },
+        "position": {
+          "type": "INTEGER",
+          "nullable": false,
+          "check": "position >= 0"
+        }
+      },
+      "primaryKey": [
+        "board_id",
+        "id"
+      ],
+      "uniqueConstraints": [
+        [
+          "board_id",
+          "column_id",
+          "position"
+        ]
+      ],
+      "foreignKeys": [
+        {
+          "columns": [
+            "board_id",
+            "column_id"
+          ],
+          "references": {
+            "table": "board_columns",
+            "columns": [
+              "board_id",
+              "id"
+            ]
+          },
+          "onDelete": "CASCADE"
+        }
+      ]
+    }
+  },
+  "seed": {
+    "user": {
+      "username": "user"
+    },
+    "board": {
+      "strategy": "Create the user's board and the frontend initialData columns and cards when that user first requests a board and has none."
+    }
+  }
+}

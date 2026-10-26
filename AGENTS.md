@@ -51,3 +51,34 @@ A working MVP of the frontend has been built and is already in frontend. This is
 
 All documents for planning and executing this project will be in the docs/ directory.
 Please review the docs/PLAN.md document before proceeding.
+
+## Agent Collaboration
+
+Codex plans and reviews; Claude Code implements. Keep exactly one bounded implementation
+task active in the shared worktree at a time.
+
+When the user authorizes direct coordination and an existing writable Claude Code terminal
+is identified, Codex uses supervised Orca orchestration on that terminal:
+
+1. Codex inspects the actual repository state and dispatches one Task containing the
+   objective, evidence, scope, constraints, acceptance criteria, relevant checks and the
+   required completion summary. Tasks normally follow one part, or one step, of
+   `docs/PLAN.md`.
+2. Once Orca confirms the dispatch started, Codex ends its turn. It does not poll the
+   terminal or review partial edits.
+3. Claude implements only the dispatched scope, sends `worker_done` exactly once with an
+   explicit outcome and a compact review summary, then stops and waits.
+4. The callback starts a new Codex turn. Codex treats the summary only as an index,
+   inspects the actual Git state and diff, reruns relevant checks and marks each acceptance
+   criterion as met, unmet or not verified.
+5. Corrections go through a fresh bounded Task. Otherwise Codex settles the task according
+   to Orca's current instructions.
+
+Live monitoring is used only when the user requests it or to prevent an observed
+unauthorized or destructive action. If direct coordination is unavailable, Codex provides
+a complete copyable prompt instead.
+
+Approval gates in `docs/PLAN.md` (after Part 1 and Part 5) require explicit user approval
+before work continues. Coordination does not authorize commits, pushes, deployments,
+database mutations, credential changes or external-system actions. Preserve unrelated and
+pre-existing work in the worktree.
