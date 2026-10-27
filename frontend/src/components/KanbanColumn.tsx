@@ -1,3 +1,4 @@
+import { useState } from "react";
 import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -8,9 +9,47 @@ import { NewCardForm } from "@/components/NewCardForm";
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
-  onRename: (columnId: string, title: string) => void;
-  onAddCard: (columnId: string, title: string, details: string) => void;
-  onDeleteCard: (columnId: string, cardId: string) => void;
+  onRename: (columnId: string, title: string) => Promise<boolean>;
+  onAddCard: (columnId: string, title: string, details: string) => Promise<boolean>;
+  onEditCard: (cardId: string, title: string, details: string) => Promise<boolean>;
+  onDeleteCard: (cardId: string) => void;
+};
+
+type ColumnTitleProps = {
+  title: string;
+  onRename: (title: string) => Promise<boolean>;
+};
+
+// Keeps a local draft and saves a changed, non-empty title on blur or Enter.
+// Remounted (via key) whenever the server title changes.
+const ColumnTitle = ({ title, onRename }: ColumnTitleProps) => {
+  const [draft, setDraft] = useState(title);
+
+  const commit = async () => {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === title) {
+      setDraft(title);
+      return;
+    }
+    if (!(await onRename(trimmed))) {
+      setDraft(title);
+    }
+  };
+
+  return (
+    <input
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        }
+      }}
+      className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
+      aria-label="Column title"
+    />
+  );
 };
 
 export const KanbanColumn = ({
@@ -18,6 +57,7 @@ export const KanbanColumn = ({
   cards,
   onRename,
   onAddCard,
+  onEditCard,
   onDeleteCard,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
@@ -39,11 +79,10 @@ export const KanbanColumn = ({
               {cards.length} cards
             </span>
           </div>
-          <input
-            value={column.title}
-            onChange={(event) => onRename(column.id, event.target.value)}
-            className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
-            aria-label="Column title"
+          <ColumnTitle
+            key={column.title}
+            title={column.title}
+            onRename={(title) => onRename(column.id, title)}
           />
         </div>
       </div>
@@ -53,7 +92,8 @@ export const KanbanColumn = ({
             <KanbanCard
               key={card.id}
               card={card}
-              onDelete={(cardId) => onDeleteCard(column.id, cardId)}
+              onEdit={onEditCard}
+              onDelete={onDeleteCard}
             />
           ))}
         </SortableContext>

@@ -268,21 +268,27 @@ Make the frontend use the backend API so the board is persistent.
 
 ### Steps
 
-- [ ] Load the board from the API after sign in instead of `initialData`.
-- [ ] Persist column renames, card add, delete and move through the API.
-- [ ] Add card editing (title and details), required by the business requirements and
+- [x] Load the board from the API after sign in instead of `initialData`.
+- [x] Persist column renames, card add, delete and move through the API.
+- [x] Add card editing (title and details), required by the business requirements and
       missing from the current demo, persisted through the API.
-- [ ] Show a simple loading state and a simple error message on failed requests.
-- [ ] Keep `moveCard` and other board logic pure and unit tested.
-- [ ] Add frontend unit tests with a mocked API, and E2E tests against the container.
-- [ ] Update `frontend/AGENTS.md`.
+- [x] Show a simple loading state and a simple error message on failed requests.
+- [x] Keep `moveCard` and other board logic pure and unit tested.
+- [x] Add frontend unit tests with a mocked API, and E2E tests against the container.
+- [x] Update `frontend/AGENTS.md`.
 
 ### Tests/Verification
 
-- `npm run lint`, `npm run test:unit` and backend tests pass.
-- E2E in the container: sign in, rename a column, add, edit, move and delete cards,
-  reload the page and confirm every change persisted; restart the container and confirm
-  again.
+- [x] `npm run lint`, `npm run test:unit` and backend tests pass. Also `npm run build`,
+      and `npm run test:e2e` against the standalone dev server with the mocked API.
+- [x] E2E in the container: sign in, rename a column, add, edit, move and delete cards,
+      reload the page and confirm every change persisted; restart the container and confirm
+      again. Verified on Windows on 2026-10-26 with `scripts/start.ps1` and
+      `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8000 npm run test:e2e`, using
+      `E2E_RESTART_COMMAND` to run `scripts/stop.ps1` and `scripts/start.ps1` mid-test.
+      The test removed its cards and restored the column title; the `pm-data` board
+      matched its pre-test state afterwards and the container was stopped. Mac and Linux
+      not verified.
 
 ### Success Criteria
 
@@ -297,18 +303,21 @@ Allow the backend to call OpenRouter.
 
 ### Steps
 
-- [ ] Add an OpenRouter client in the backend reading `OPENROUTER_API_KEY` from the
+- [x] Add an OpenRouter client in the backend reading `OPENROUTER_API_KEY` from the
       environment and using model `openai/gpt-oss-120b`.
-- [ ] Add a minimal backend route or function for a test prompt (provisional:
+- [x] Add a minimal backend route or function for a test prompt (provisional:
       `POST /api/ai/test`, signed-in only).
-- [ ] Return a clear error when the key is missing or the call fails; never log the key.
-- [ ] Add unit tests with the HTTP call mocked, and a separately runnable live test that
-      asks "What is 2+2?".
+- [x] Return a clear error when the key is missing or the call fails; never log the key.
+- [x] Add unit tests with the HTTP call mocked, and a separately runnable live test that
+      asks "What is 2+2?". The live test is `tests/test_ai_live.py`, skipped unless
+      `RUN_LIVE_AI=1`.
 
 ### Tests/Verification
 
-- Mocked unit tests pass without network access or a key.
-- Live test in the container returns an answer containing 4.
+- [x] Mocked unit tests pass without network access or a key. `uv run --locked pytest -q
+      -W error`: 81 passed (63 existing, 18 new), 1 skipped (live test).
+- [ ] Live test in the container returns an answer containing 4. Not verified: no `.env`
+      or `OPENROUTER_API_KEY` was available on 2026-10-26.
 
 ### Success Criteria
 

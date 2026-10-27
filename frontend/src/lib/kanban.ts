@@ -161,8 +161,31 @@ export const moveCard = (
   });
 };
 
-export const createId = (prefix: string) => {
-  const randomPart = Math.random().toString(36).slice(2, 8);
-  const timePart = Date.now().toString(36);
-  return `${prefix}-${randomPart}${timePart}`;
+
+export type MovePlan = {
+  columns: Column[];
+  columnId: string;
+  position: number;
+};
+
+// Final columns after a drop plus the move API arguments: the target column and the
+// card's zero-based index in that column's final list. Returns null for a no-op drop.
+export const planMove = (
+  columns: Column[],
+  activeId: string,
+  overId: string
+): MovePlan | null => {
+  const nextColumns = moveCard(columns, activeId, overId);
+  if (nextColumns === columns) {
+    return null;
+  }
+  const target = nextColumns.find((column) => column.cardIds.includes(activeId));
+  if (!target) {
+    return null;
+  }
+  return {
+    columns: nextColumns,
+    columnId: target.id,
+    position: target.cardIds.indexOf(activeId),
+  };
 };

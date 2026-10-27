@@ -1,23 +1,27 @@
 # Backend
 
 FastAPI backend for the Project Management MVP, managed with `uv`. It serves authentication,
-a health endpoint, the SQLite-backed board API and the Next.js static export at `/`. No AI
-yet. The approved design is in `docs/DATABASE.md` and `docs/schema.json`.
+a health endpoint, the SQLite-backed board API, an OpenRouter connectivity test route and the
+Next.js static export at `/`. The approved design is in `docs/DATABASE.md` and `docs/schema.json`.
 
 ## Layout
 
 ```
-pyproject.toml        Project metadata; runtime deps (fastapi, uvicorn); dev group (pytest, httpx2)
+pyproject.toml        Project metadata; runtime deps (fastapi, httpx2, uvicorn); dev group (pytest)
 uv.lock               Locked dependency versions; keep in sync with pyproject.toml
 .gitignore            Ignores data/ (local development database)
 app/
-  main.py             create_app(static_dir, database_path): auth, board routes, static mount
+  main.py             create_app(static_dir, database_path, ai_transport): auth, board and
+                      AI test routes, static mount
   db.py               DATABASE_PATH, connect() with foreign keys on, init_db() schema + users
   board.py            Seed data and board service functions (read, rename, card CRUD, move)
+  ai.py               OpenRouter client: chat(messages, transport=None) -> reply text
 tests/
   test_main.py        Health, auth, static serving and /api 404 behavior
   test_board.py       Database setup, seeding, every board route, validation, ordering,
                       moves, deletion compaction, anonymous rejection, per-user isolation
+  test_ai.py          /api/ai/test with a mocked OpenRouter transport (no key or network)
+  test_ai_live.py     Live "What is 2+2?" check; skipped unless RUN_LIVE_AI=1
 ```
 
 ## Routes
@@ -38,6 +42,11 @@ tests/
     zero-based index in the target column after removing the card from its old place
   - `DELETE /api/cards/{card_id}`
   Titles are trimmed and must be non-empty; details must be strings and may be empty.
+- `POST /api/ai/test` with `{prompt}` (signed in; trimmed, non-empty) returns `{reply}`.
+  401 anonymous (checked before any provider call), 422 invalid body, 503
+  `{"detail": "AI is not configured"}` without `OPENROUTER_API_KEY`, 502
+  `{"detail": "AI provider request failed"}` for provider HTTP, network or malformed
+  responses. Provider bodies are never returned.
 - Unknown `/api/...` routes return FastAPI's JSON 404 response.
 - Everything outside `/api` is served from the static directory by Starlette `StaticFiles`
   with `html=True`: `/` returns `index.html`, `/_next/...` assets, and unknown paths return
@@ -71,6 +80,18 @@ Sessions last one day and use `SameSite=Lax`.
   constraint collisions.
 - New card IDs are `card-` plus 12 hex characters.
 
+## AI
+
+- `ai.chat` POSTs `{model, messages}` to `https://openrouter.ai/api/v1/chat/completions`
+  with model `openai/gpt-oss-120b`, `Authorization: Bearer <OPENROUTER_API_KEY>` and a
+  30 second timeout, and returns the first choice's message content.
+- The key is read from the environment on every call (the start scripts pass `.env` with
+  `--env-file`). It is never logged or returned, and errors are raised `from None` so the
+  original request is not attached.
+- `create_app(..., ai_transport=...)` injects an `httpx2` transport; tests use
+  `httpx2.MockTransport`. `None` uses the real network.
+- Live check: `RUN_LIVE_AI=1 uv run pytest tests/test_ai_live.py` with the key set.
+
 ## Static directory
 
 `STATIC_DIR` comes from the `STATIC_DIR` environment variable, defaulting to
@@ -83,7 +104,8 @@ the frontend has not been built (static paths then return 404). The Docker image
 Run from `backend/`:
 
 - `uv sync` - create `.venv` with runtime and dev dependencies
-- `uv run pytest` - run tests (each test uses its own temporary database)
+- `uv run pytest` - run tests (each test uses its own temporary database; the live AI
+  test is skipped)
 - `uv run uvicorn app.main:app --reload` - local dev server on port 8000, using
   `backend/data/pm.db`; run `npm run build` in `frontend/` first to serve the board
 - `uv lock` after changing dependencies; `uv lock --check` to confirm the lock is current
@@ -101,4 +123,5 @@ mount the database volume. See `scripts/AGENTS.md`.
 ## Notes
 
 - `requires-python = ">=3.14"`; the image uses `python:3.14-slim`.
-- `httpx2` (dev group) is the HTTP client Starlette's `TestClient` uses.
+- `httpx2` is a runtime dependency (OpenRouter client) and is also what Starlette's
+  `TestClient` uses.

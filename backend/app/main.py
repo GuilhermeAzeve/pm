@@ -8,12 +8,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
+import httpx2
 from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StrictInt, StringConstraints
 
-from app import board
+from app import ai, board
 from app.db import DATABASE_PATH, connect, init_db
 
 # Next.js static export; the Docker image sets STATIC_DIR to its copy of the export.
@@ -50,6 +51,10 @@ class CreateCardRequest(BaseModel):
 class UpdateCardRequest(BaseModel):
     title: Title
     details: str
+
+
+class AITestRequest(BaseModel):
+    prompt: Title
 
 
 class MoveCardRequest(BaseModel):
@@ -170,6 +175,20 @@ def delete_card(card_id: str, username: Username, conn: Db) -> dict:
     return board.get_board(conn, board_id)
 
 
+@api.post("/ai/test")
+def ai_test(body: AITestRequest, request: Request, username: Username) -> dict[str, str]:
+    try:
+        reply = ai.chat(
+            [{"role": "user", "content": body.prompt}],
+            transport=request.app.state.ai_transport,
+        )
+    except ai.AINotConfiguredError:
+        raise HTTPException(status_code=503, detail="AI is not configured") from None
+    except ai.AIUpstreamError:
+        raise HTTPException(status_code=502, detail="AI provider request failed") from None
+    return {"reply": reply}
+
+
 @api.api_route(
     "/{path:path}",
     methods=API_METHODS,
@@ -182,7 +201,11 @@ def api_root_not_found() -> None:
     raise HTTPException(status_code=404, detail="Not Found")
 
 
-def create_app(static_dir: Path, database_path: Path = DATABASE_PATH) -> FastAPI:
+def create_app(
+    static_dir: Path,
+    database_path: Path = DATABASE_PATH,
+    ai_transport: httpx2.BaseTransport | None = None,
+) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         init_db(database_path, [USERNAME])
@@ -190,6 +213,8 @@ def create_app(static_dir: Path, database_path: Path = DATABASE_PATH) -> FastAPI
 
     app = FastAPI(title="Project Management MVP", lifespan=lifespan)
     app.state.database_path = database_path
+    # None uses the real network; tests pass an httpx2.MockTransport.
+    app.state.ai_transport = ai_transport
 
     @app.exception_handler(board.NotFoundError)
     async def not_found(request: Request, exc: board.NotFoundError):

@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
+import { initialData } from "@/lib/kanban";
 
 const response = (status: number, body: object = {}) =>
   Promise.resolve(
@@ -43,11 +44,13 @@ describe("AuthenticatedApp", () => {
   });
 
   it("shows the board after sign in and returns to login after logout", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockImplementationOnce(() => response(401))
-      .mockImplementationOnce(() => response(200, { username: "user" }))
-      .mockImplementationOnce(() => response(204));
+    const routes: Record<string, () => Promise<Response>> = {
+      "/api/me": () => response(401),
+      "/api/login": () => response(200, { username: "user" }),
+      "/api/board": () => response(200, initialData),
+      "/api/logout": () => response(204),
+    };
+    const fetchMock = vi.fn((url: string) => routes[url]());
     vi.stubGlobal("fetch", fetchMock);
     render(<AuthenticatedApp />);
 
@@ -57,6 +60,8 @@ describe("AuthenticatedApp", () => {
 
     expect(await screen.findByText("Single Board Kanban")).toBeInTheDocument();
     expect(screen.getByText("user")).toBeInTheDocument();
+    expect(await screen.findAllByTestId(/^column-/)).toHaveLength(5);
+    expect(fetchMock).toHaveBeenCalledWith("/api/board", expect.anything());
 
     await userEvent.click(screen.getByRole("button", { name: "Log out" }));
     await waitFor(() =>
