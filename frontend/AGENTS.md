@@ -1,7 +1,8 @@
 # Frontend
 
 This describes the frontend as it exists today. It has a backend-authenticated sign-in gate
-around a Kanban board persisted through the FastAPI board API, with no AI yet. It is built
+around a Kanban board persisted through the FastAPI board API, with an AI chat sidebar that
+can change the board. It is built
 as a static export and served by the FastAPI backend at `/`. Planned changes are tracked in
 `docs/PLAN.md`.
 
@@ -35,15 +36,18 @@ src/
     globals.css          Tailwind import, color/surface CSS variables, base styles
   components/
     AuthenticatedApp.tsx Login/session gate; calls /api/me, /api/login and /api/logout
-    KanbanBoard.tsx      Client component; loads the board, saves changes, owns the DndContext
+    KanbanBoard.tsx      Client component; loads the board, saves changes, owns the DndContext,
+                         lays out the board and the chat sidebar
+    AIChatSidebar.tsx    AI chat: conversation, pending/error states, applies returned boards
     KanbanColumn.tsx     Droppable column, title draft input, card list, new-card form
     KanbanCard.tsx       Sortable card with inline Edit form and a Remove button
     KanbanCardPreview.tsx  Static card used in the DragOverlay
     NewCardForm.tsx      Toggleable form for title + details
     AuthenticatedApp.test.tsx  Authentication component tests (fetch mocked)
     KanbanBoard.test.tsx Board component tests (fetch mocked)
+    AIChatSidebar.test.tsx  Chat sidebar tests rendered inside KanbanBoard (fetch mocked)
   lib/
-    api.ts               Typed board API client (boardApi) and ApiError
+    api.ts               Typed board API client (boardApi), AI chat client (aiApi) and ApiError
     kanban.ts            Types, initialData, moveCard, planMove
     kanban.test.ts       moveCard and planMove unit tests
   test/
@@ -90,6 +94,27 @@ tests/
   `SortableContext`; each card uses `useSortable`. `onDragEnd` calls `planMove`, shows the
   planned columns immediately, sends the move and then accepts the server board.
   `DragOverlay` renders `KanbanCardPreview` for the active card.
+- AI chat: `AIChatSidebar` posts `{message, history}` to `POST /api/ai/chat` through
+  `aiApi.chat`. `message` is the trimmed input; `history` is every earlier successful
+  `{role: "user" | "assistant", content}` turn, without the current message. History lives
+  only in component state (lost on reload; never stored).
+  - While a request is pending the user message is shown, an "Assistant is thinking..."
+    status appears, and the input and Send button are disabled. Send is also disabled for
+    an empty or whitespace-only draft.
+  - On success the user and assistant turns are appended. When `boardChanged` is true the
+    returned `board` replaces `KanbanBoard` state immediately (no reload or extra fetch);
+    when false the board is not touched.
+  - Contract mismatch: `aiApi.chat` accepts only `{reply: non-empty string, boardChanged:
+    false}` or `{reply, boardChanged: true, board: valid BoardData}` (every column has
+    string `id`, `title` and `cardIds`, and every card ID exists in `cards` with string
+    fields). Anything else, a non-OK status or a network error is a failure: the sidebar
+    shows a `role="alert"` message, removes the pending user message, puts it back in the
+    input for retry, keeps the board and history unchanged and sends nothing else. If the
+    server did change the board but its response was malformed, the change appears on the
+    next board load.
+- Layout: from the Tailwind `2xl` breakpoint (1536px) the chat is a sticky 380px column to
+  the right of the board (main width grows to 1900px); below that it stacks under the board
+  so the five columns keep their width.
 
 ## Current behavior
 
@@ -110,6 +135,10 @@ tests/
 - Delete card: "Remove" button (`aria-label="Delete <title>"`).
 - Move cards by drag and drop within and across columns.
 - All changes persist for the signed-in user.
+- AI assistant sidebar (`aside` labeled "AI assistant"): heading, a scrollable
+  conversation (`role="log"`) with an empty-state hint, "You" and "Assistant" message
+  labels, a "Message" input and a Send button ("Sending..." while pending). The AI can
+  create, edit and move cards; changes appear on the board right away.
 
 ## Commands
 
@@ -142,12 +171,20 @@ Run from `frontend/`:
   mutation failure reloads the server board.
 - `src/components/AuthenticatedApp.test.tsx`: anonymous login screen, invalid credentials,
   successful login with board fetch, logout.
+- `src/components/AIChatSidebar.test.tsx` (fetch mocked): initial UI and empty state, empty
+  message rejection, trimmed messages with exact history over three turns and message
+  rendering, pending/disabled state with duplicate-send blocking, reply only leaves the
+  board alone, `boardChanged` replaces the board without a reload, API failure then retry,
+  network error, and seven malformed or inconsistent responses.
 - `tests/kanban.spec.ts`: sign-in/session/logout flow, board load, and a persistence test
   that renames `col-discovery`, adds two uniquely named cards, edits one, drags it into
   `col-review`, deletes the other, reloads and verifies (and, with `E2E_RESTART_COMMAND`,
   restarts the container and verifies again). Against the standalone dev server it uses
   the stateful mock in `tests/mockApi.ts`; with `PLAYWRIGHT_BASE_URL` it uses the real API
-  and finally deletes its cards and restores the column title.
+  and finally deletes its cards and restores the column title. A chat test (mocked only;
+  skipped with `PLAYWRIGHT_BASE_URL` so no live AI message is sent to a real board) sends a
+  reply-only message and then `create "<title>"`, which the mock answers with a new Backlog
+  card, and checks the reply and the card appear without any navigation.
 - Vitest includes `src/**/*.{test,spec}.{ts,tsx}` and excludes `tests/`. Coverage is
   available through `@vitest/coverage-v8` (text and html reporters) but no threshold is set.
 - Selectors rely on `data-testid` values `column-<columnId>` and `card-<cardId>`, plus
@@ -168,7 +205,9 @@ Run from `frontend/`:
 
 ## Limitations
 
-- No AI chat yet.
+- Chat history is not persisted; a reload starts a new conversation.
+- The live AI chat has no automated frontend test; it is checked manually (see
+  `docs/PLAN.md` Part 10).
 - One board per user; columns are fixed (rename only).
 - Static export only: no server-side rendering, route handlers or Next.js server features.
 - `next/font/google` fetches fonts at build time, so builds need network access.

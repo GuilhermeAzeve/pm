@@ -18,14 +18,25 @@ class AIUpstreamError(Exception):
     pass
 
 
-def chat(messages: list[dict[str, str]], transport: httpx2.BaseTransport | None = None) -> str:
+def chat(
+    messages: list[dict[str, str]],
+    transport: httpx2.BaseTransport | None = None,
+    response_format: dict | None = None,
+) -> str:
     """Send chat messages to OpenRouter and return the first assistant message content.
 
-    `transport` lets tests replace the network with `httpx2.MockTransport`.
+    `response_format` requests Structured Outputs; providers that cannot honor it are
+    excluded with `require_parameters`. `transport` lets tests replace the network with
+    `httpx2.MockTransport`.
     """
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise AINotConfiguredError("OPENROUTER_API_KEY is not set")
+
+    payload: dict = {"model": MODEL, "messages": messages}
+    if response_format is not None:
+        payload["response_format"] = response_format
+        payload["provider"] = {"require_parameters": True}
 
     try:
         with httpx2.Client(transport=transport, timeout=TIMEOUT_SECONDS) as client:
@@ -35,7 +46,7 @@ def chat(messages: list[dict[str, str]], transport: httpx2.BaseTransport | None 
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
-                json={"model": MODEL, "messages": messages},
+                json=payload,
             )
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]

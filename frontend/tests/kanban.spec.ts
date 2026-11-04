@@ -156,3 +156,26 @@ test("persists column rename and card add, edit, move and delete", async ({ page
     }
   }
 });
+
+// Mocked only: the ordinary external run must not send live AI messages or change a real
+// board. The live chat check is done manually (see frontend/AGENTS.md).
+test("chats with the AI and shows its board change without a reload", async ({ page }) => {
+  test.skip(usesExternalServer, "mocked AI only");
+  await openAuthenticatedBoard(page);
+  const chat = page.getByRole("complementary", { name: "AI assistant" });
+  const log = chat.getByRole("log", { name: "Conversation" });
+  const navigations: string[] = [];
+  page.on("framenavigated", (frame) => navigations.push(frame.url()));
+
+  await chat.getByLabel("Message").fill("Hello");
+  await chat.getByRole("button", { name: "Send" }).click();
+  await expect(log.getByText("You said: Hello")).toBeVisible();
+
+  await chat.getByLabel("Message").fill('create "AI e2e card"');
+  await chat.getByRole("button", { name: "Send" }).click();
+  await expect(log.getByText('Created "AI e2e card".')).toBeVisible();
+  await expect(
+    page.getByTestId("column-col-backlog").getByText("AI e2e card")
+  ).toBeVisible();
+  expect(navigations).toEqual([]);
+});

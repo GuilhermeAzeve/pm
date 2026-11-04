@@ -6,7 +6,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import httpx2
 from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Request, Response
@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StrictInt, StringConstraints
 
-from app import ai, board
+from app import ai, assistant, board
 from app.db import DATABASE_PATH, connect, init_db
 
 # Next.js static export; the Docker image sets STATIC_DIR to its copy of the export.
@@ -55,6 +55,16 @@ class UpdateCardRequest(BaseModel):
 
 class AITestRequest(BaseModel):
     prompt: Title
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: Title
+
+
+class AIChatRequest(BaseModel):
+    message: Title
+    history: list[ChatMessage] = []
 
 
 class MoveCardRequest(BaseModel):
@@ -187,6 +197,35 @@ def ai_test(body: AITestRequest, request: Request, username: Username) -> dict[s
     except ai.AIUpstreamError:
         raise HTTPException(status_code=502, detail="AI provider request failed") from None
     return {"reply": reply}
+
+
+@api.post("/ai/chat")
+def ai_chat(body: AIChatRequest, request: Request, username: Username, conn: Db) -> dict:
+    board_id = board.get_or_create_board_id(conn, username)
+    history = [{"role": m.role, "content": m.content} for m in body.history]
+    messages = assistant.build_messages(board.get_board(conn, board_id), history, body.message)
+    # End the read (and any lazy seed) transaction so the database is not locked while
+    # waiting for the provider; the operations below run in a new transaction.
+    conn.commit()
+
+    try:
+        content = ai.chat(
+            messages,
+            transport=request.app.state.ai_transport,
+            response_format=assistant.RESPONSE_FORMAT,
+        )
+        result = assistant.parse_result(content)
+        if not result.operations:
+            return {"reply": result.reply, "boardChanged": False, "board": None}
+        assistant.apply_operations(conn, board_id, result.operations)
+    except ai.AINotConfiguredError:
+        raise HTTPException(status_code=503, detail="AI is not configured") from None
+    except ai.AIUpstreamError:
+        raise HTTPException(status_code=502, detail="AI provider request failed") from None
+    except assistant.InvalidOutputError:
+        # Raising rolls back every operation already applied in this transaction.
+        raise HTTPException(status_code=502, detail="AI returned an invalid response") from None
+    return {"reply": result.reply, "boardChanged": True, "board": board.get_board(conn, board_id)}
 
 
 @api.api_route(

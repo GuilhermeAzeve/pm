@@ -40,6 +40,23 @@ export const mockApi = async (page: Page, initiallySignedIn: boolean) => {
     return route.fulfill({ status: 204, body: "" });
   });
 
+  // Deterministic stand-in for the AI: a message `create "<title>"` adds a card with that
+  // title to the first column; anything else gets a reply only.
+  await page.route("**/api/ai/chat", (route) => {
+    if (!signedIn) {
+      return reply(route, 401, { detail: "Not authenticated" });
+    }
+    const { message } = route.request().postDataJSON() as { message: string };
+    const title = /^create "(.+)"$/.exec(message)?.[1];
+    if (!title) {
+      return reply(route, 200, { reply: `You said: ${message}`, boardChanged: false, board: null });
+    }
+    const cardId = `card-mock-${nextId++}`;
+    board.cards[cardId] = { id: cardId, title, details: "" };
+    board.columns[0].cardIds.push(cardId);
+    return reply(route, 200, { reply: `Created "${title}".`, boardChanged: true, board });
+  });
+
   await page.route(/\/api\/(board|columns|cards)/, (route) => {
     if (!signedIn) {
       return reply(route, 401, { detail: "Not authenticated" });

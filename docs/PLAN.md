@@ -316,8 +316,12 @@ Allow the backend to call OpenRouter.
 
 - [x] Mocked unit tests pass without network access or a key. `uv run --locked pytest -q
       -W error`: 81 passed (63 existing, 18 new), 1 skipped (live test).
-- [ ] Live test in the container returns an answer containing 4. Not verified: no `.env`
-      or `OPENROUTER_API_KEY` was available on 2026-10-26.
+- [x] Live test in the container returns an answer containing 4. Verified on Windows
+      (2026-11-04): `.env` present and gitignored with `OPENROUTER_API_KEY` set;
+      `scripts/start.ps1` built and started the container with `httpx2` as a runtime
+      dependency; a signed-in `POST /api/ai/test` with "What is 2+2?" returned a non-empty
+      reply containing 4 from `openai/gpt-oss-120b`; `scripts/stop.ps1` then stopped and
+      removed the container. Mac and Linux runtime behavior is not verified.
 
 ### Success Criteria
 
@@ -332,23 +336,36 @@ the board.
 
 ### Steps
 
-- [ ] Add a chat route (provisional: `POST /api/ai/chat`) that takes the user's message
+- [x] Add a chat route (provisional: `POST /api/ai/chat`) that takes the user's message
       and conversation history, loads the user's board JSON and sends both to the model.
-- [ ] Define a Structured Outputs schema: a required reply message for the user and an
+      `POST /api/ai/chat` with `{message, history}`; the board goes in a system message.
+- [x] Define a Structured Outputs schema: a required reply message for the user and an
       optional board update (create, edit, move one or more cards; exact shape decided
-      here based on the approved Part 5 design).
-- [ ] Validate the AI output; apply a valid update to the database through the same
-      logic as Part 6 routes; reject invalid updates without corrupting the board.
-- [ ] Return the reply and whether the board changed (and the updated board if so).
-- [ ] Keep conversation history client-supplied for the MVP unless Part 5 approved storing
-      it.
-- [ ] Add backend tests with a mocked model: reply only, single update, multi-card update,
-      invalid output; plus a live test.
+      here based on the approved Part 5 design). `{reply, operations}` where operations
+      is an ordered array of `create`, `edit` and `move`; strict, sent with
+      `provider.require_parameters` (see `backend/AGENTS.md`).
+- [x] Validate the AI output; apply a valid update to the database through the same
+      logic as Part 6 routes; reject invalid updates without corrupting the board. The
+      whole result is validated first; any failing operation rolls back all of them (502).
+- [x] Return the reply and whether the board changed (and the updated board if so).
+      `{reply, boardChanged, board}`.
+- [x] Keep conversation history client-supplied for the MVP unless Part 5 approved storing
+      it. History is validated and not stored.
+- [x] Add backend tests with a mocked model: reply only, single update, multi-card update,
+      invalid output; plus a live test. `tests/test_ai_chat.py` and
+      `tests/test_ai_chat_live.py` (skipped unless `PM_LIVE_BASE_URL` is set).
 
 ### Tests/Verification
 
-- `uv run pytest` passes with mocked AI responses covering the cases above.
-- Live test: asking the AI to add a card results in that card in the database.
+- [x] `uv run pytest` passes with mocked AI responses covering the cases above.
+      `uv run --locked pytest -q -W error`: 141 passed (81 existing, 60 new), 2 skipped
+      (live tests); `uv lock --check` passes.
+- [x] Live test: asking the AI to add a card results in that card in the database.
+      Verified on Windows (2026-11-04) against the container from `scripts/start.ps1`:
+      `PM_LIVE_BASE_URL=http://127.0.0.1:8000 uv run pytest tests/test_ai_chat_live.py`
+      passed; the card was created, read back from `GET /api/board` and deleted, and a
+      logical dump of `pm-data` hashed the same before and after. `scripts/stop.ps1` then
+      removed the container. Mac and Linux runtime behavior is not verified.
 
 ### Success Criteria
 
@@ -362,22 +379,37 @@ Add a sidebar chat UI that uses the Part 9 route and refreshes the board on AI u
 
 ### Steps
 
-- [ ] Add a sidebar chat widget alongside the board: message list, input, send button,
-      styled with the project colors.
-- [ ] Send messages and conversation history to the chat route; show the AI reply and a
-      simple pending state.
-- [ ] When the response reports a board change, refresh the board in the UI automatically.
-- [ ] Show a simple error message when the AI call fails.
-- [ ] Add frontend unit tests with a mocked API and E2E tests.
-- [ ] Update `frontend/AGENTS.md` and keep the README minimal.
+- [x] Add a sidebar chat widget alongside the board: message list, input, send button,
+      styled with the project colors. `AIChatSidebar`: beside the board from 1536px wide,
+      stacked below it on smaller screens.
+- [x] Send messages and conversation history to the chat route; show the AI reply and a
+      simple pending state. History is successful turns only, kept in component state.
+- [x] When the response reports a board change, refresh the board in the UI automatically.
+      The returned board replaces the displayed board without another request.
+- [x] Show a simple error message when the AI call fails. Malformed or inconsistent
+      responses count as failures; the board and history stay unchanged.
+- [x] Add frontend unit tests with a mocked API and E2E tests.
+- [x] Update `frontend/AGENTS.md` and keep the README minimal (no README added).
 
 ### Tests/Verification
 
-- `npm run lint`, `npm run test:unit` and backend tests pass.
-- E2E with a mocked AI route: send a message, see the reply, board updates without
-  reload.
-- Manual live check in the container: ask the AI to create and move a card and see the
-  board update.
+- [x] `npm run lint`, `npm run test:unit` and backend tests pass. 2026-11-04: lint clean;
+      37 unit tests passed (22 existing, 15 new); `npm run build` passed;
+      `uv run --locked pytest -q -W error` 141 passed, 2 skipped (live tests).
+- [x] E2E with a mocked AI route: send a message, see the reply, board updates without
+      reload. `npm run test:e2e` (mocked dev server): 4 passed, including the new chat
+      test. The chat test is skipped with `PLAYWRIGHT_BASE_URL`, so an external run never
+      sends live AI messages.
+- [x] Manual live check in the container: ask the AI to create and move a card and see the
+      board update. Verified on Windows (2026-11-04) in a dedicated container
+      (`pm-part10-live`, port 8010, temporary volume) built from this worktree with the
+      real key, driven through the UI with Playwright: the AI created a uniquely titled
+      card in Backlog, then a second message that did not repeat the title ("move the
+      card you just created to the top of the Done column", sent with 2 history turns)
+      moved it to Done position 0. The UI and `GET /api/board` matched, and the card was
+      still there after a container restart and page reload. Only that card was deleted
+      (8 seed cards left), then the container, volume and image were removed. `pm-app`
+      and `pm-data` were not touched. Mac and Linux runtime behavior is not verified.
 
 ### Success Criteria
 
